@@ -1,85 +1,59 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hack Day Swap</title>
-  <style>
-    :root { --stage:#09090d; --panel:#17131f; --uv:#5b21b6; --purple:#8b5cf6; --magenta:#d946ef; --red:#cc4141; --white:#f7f7fb; --muted:#aaa4b5; --cyan:#4fd1c5; --amber:#f6c453; }
-    * { box-sizing:border-box; } body { margin:0; min-height:100vh; color:var(--white); background:radial-gradient(circle at 50% -10%,#27134b 0,var(--stage) 43%); font-family:Impact, Haettenschweiler, "Arial Narrow Bold", system-ui, sans-serif; }
-    button { font:inherit; color:inherit; cursor:pointer; } .app { width:min(100%, 580px); margin:auto; padding:20px 16px 24px; text-align:center; }
-    .eyebrow,.utility,.tray-label { color:var(--muted); font:700 10px/1.2 system-ui,sans-serif; letter-spacing:.16em; text-transform:uppercase; }
-    header { display:flex; align-items:end; justify-content:space-between; gap:12px; margin:8px 0 17px; text-align:left; } h1 { margin:3px 0 0; font-size:clamp(32px,10vw,52px); line-height:.82; letter-spacing:-.04em; transform:scaleX(.87); transform-origin:left; white-space:nowrap; } .moves { text-align:right; white-space:nowrap; } #moveCount { display:block; color:var(--magenta); font-size:28px; line-height:.9; }
-    .board-wrap { position:relative; border:1px solid #3e2a58; padding:7px; background:linear-gradient(145deg,#21192d,#100e15); box-shadow:0 0 0 2px #0d0b11, 0 18px 36px #0008; }
-    .board { display:grid; grid-template-columns:repeat(11,1fr); gap:3px; width:100%; aspect-ratio:1; touch-action:manipulation; }
-    .cell { border:0; padding:0; min-width:0; position:relative; border-radius:3px; background:var(--socket); box-shadow:inset 0 0 0 1px #0007, inset 0 2px 3px #0009; }
-    .cell.empty::after { content:""; position:absolute; inset:26%; border:1px dashed #f7f7fb66; border-radius:2px; } .cell.correct { box-shadow:inset 0 0 0 2px #f7f7fb44, inset 0 2px 3px #0009; }
-    .piece { position:absolute; inset:16%; border-radius:28%; background:linear-gradient(135deg,#fff9 0 13%,transparent 14%),var(--piece); box-shadow:0 2px 3px #000a,inset 0 -2px 3px #0005; display:grid; place-items:center; color:#09090d; font:900 clamp(9px,2.8vw,17px)/1 system-ui,sans-serif; }
-    .selected .piece { outline:2px solid var(--white); outline-offset:2px; animation:pulse .75s ease-in-out infinite alternate; } .selected-source { box-shadow:inset 0 0 0 2px var(--magenta); }
-    .tray-area { margin:16px 0 18px; padding:10px; background:var(--panel); border:1px solid #332543; } .tray-title { display:flex; justify-content:space-between; margin-bottom:8px; } .tray { display:grid; grid-template-columns:repeat(12,1fr); gap:4px; min-height:28px; touch-action:manipulation; }
-    .slot { aspect-ratio:1; border-radius:3px; background:#0b0910; border:1px solid #3a3044; position:relative; } .slot .piece { inset:10%; font-size:11px; }
-    .controls { display:flex; justify-content:center; gap:8px; } .control { border:1px solid #5d407f; background:#21152e; padding:10px 15px; font:700 11px/1 system-ui,sans-serif; letter-spacing:.1em; text-transform:uppercase; } .control.primary { border-color:var(--magenta); background:linear-gradient(110deg,var(--uv),#8520a1); }
-    .win { position:absolute; inset:15%; display:none; place-items:center; padding:12px; background:#09090de8; border:1px solid var(--magenta); box-shadow:0 0 25px #d946ef88; } .win.show { display:grid; } .win b { font-size:clamp(22px,7vw,40px); line-height:.9; color:var(--white); } .win span { display:block; margin-top:7px; color:var(--cyan); font:700 10px/1.3 system-ui,sans-serif; letter-spacing:.12em; text-transform:uppercase; }
-    .shake { animation:shake .27s linear; } @keyframes shake { 20%,60%{transform:translateX(-5px)}40%,80%{transform:translateX(5px)} } @keyframes pulse { to { transform:scale(1.12); filter:brightness(1.2); } }
-    @media (max-width:390px) { .app { padding:13px 10px 15px; } header { margin-bottom:11px; } .board { gap:2px; } .board-wrap { padding:5px; } .tray-area { margin:10px 0 12px; padding:8px; } .control { padding:9px 12px; } }
-    @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.001ms!important; transition-duration:.001ms!important; } }
-  </style>
-</head>
-<body><main class="app">
-  <div class="eyebrow">AI Hack Day · Mini Build</div>
-  <header><div><h1>HACK DAY SWAP</h1></div><div class="moves utility">Moves <strong id="moveCount">0</strong></div></header>
-  <section class="board-wrap"><div id="board" class="board" aria-label="Robot puzzle board"></div><div id="win" class="win" role="status"><div><b>MODEL ALIGNED</b><span>Robot face restored · memory clear</span></div></div></section>
-  <section class="tray-area"><div class="tray-title"><span class="tray-label">Temporary memory tray</span><span id="trayCount" class="utility">0 / 12</span></div><button id="tray" class="tray" aria-label="Temporary memory tray"></button></section>
-  <div class="controls"><button id="restart" class="control" type="button">Restart</button><button id="shuffle" class="control primary" type="button">New shuffle</button></div>
-</main>
-<script>
-(() => {
-  const W=11, N=W*W, CAPACITY=12;
-  const colours={p:{hex:'#8b5cf6',glyph:'⌁'},m:{hex:'#d946ef',glyph:'✦'},c:{hex:'#4fd1c5',glyph:'◉'},a:{hex:'#f6c453',glyph:'▣'},r:{hex:'#cc4141',glyph:'‹›'}};
-  // Pixel-art robot: violet stage, magenta head, cyan eyes, amber face plate, red antenna/ears.
-  const art=[
-    'ppppprppppp','ppppprppppp','pppmmmm mppp','pprmmmmmmrp','pmmmmmmmmmp','pmmcmmmc mmp','pmmmmmmmmmp','pmmmaaaa mmp','pmmmaaaa mmp','pprmmmmmmrp','ppppppppppp'
-  ].map(row=>row.replaceAll(' ',''));
-  const target=art.join('').split('');
-  let initial=[], pieces=[], tray=[], selected=[], moves=0, seed=1;
-  const board=document.querySelector('#board'), trayEl=document.querySelector('#tray'), count=document.querySelector('#trayCount'), moveEl=document.querySelector('#moveCount'), win=document.querySelector('#win');
-  const coords=i=>[i%W,(i/W)|0];
-  const neighbours=i=>{const [x,y]=coords(i),out=[];for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if((dx||dy)&&x+dx>=0&&x+dx<W&&y+dy>=0&&y+dy<W)out.push((y+dy)*W+x+dx);return out};
-  const group=(start, predicate, limit=Infinity)=>{if(!predicate(start))return [];const seen=new Set([start]),out=[start];for(let h=0;h<out.length&&out.length<limit;h++)for(const j of neighbours(out[h]))if(out.length<limit&&!seen.has(j)&&predicate(j)){seen.add(j);out.push(j)}return out};
-  const liftable=i=>pieces[i]&&pieces[i]!==target[i];
-  const selectionFor=i=>group(i,j=>liftable(j)&&pieces[j]===pieces[i]);
-  const emptyRun=i=>group(i,j=>pieces[j]===null&&target[j]===target[i]);
-  const waitingRun=(i,colour)=>group(i,j=>target[j]===colour&&pieces[j]!==target[j]);
-  function invalid(el){el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');}
-  // A positional rotation keeps the exact colour inventory intact, unlike a
-  // colour substitution (our robot has deliberately uneven colour counts).
-  function newFixed(){ return target.map((_,i)=>target[(i+37)%N]); }
-  function rng(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
-  function shuffled(){const a=newFixed(); for(let i=a.length-1;i>0;i--){const j=(rng()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]]} return a;}
-  function reset(next){ initial=next.slice(); pieces=next.slice(); tray=[];selected=[];moves=0;render(); }
-  function pieceMarkup(c){return '<span class="piece" style="--piece:'+colours[c].hex+'">'+colours[c].glyph+'</span>'}
-  function render(){board.innerHTML=''; for(let i=0;i<N;i++){const b=document.createElement('button');b.type='button';b.className='cell'+(!pieces[i]?' empty':'')+(pieces[i]===target[i]?' correct':'')+(selected.includes(i)?' selected selected-source':'');b.style.setProperty('--socket',colours[target[i]].hex);b.dataset.index=i;b.setAttribute('aria-label',`Socket ${i+1}, target ${target[i]}${pieces[i]?`, piece ${pieces[i]}`:', empty'}`);if(pieces[i])b.innerHTML=pieceMarkup(pieces[i]);board.append(b)}
-    trayEl.innerHTML=''; for(let i=0;i<CAPACITY;i++){const s=document.createElement('span');s.className='slot';if(tray[i])s.innerHTML=pieceMarkup(tray[i]);trayEl.append(s)} count.textContent=`${tray.length} / ${CAPACITY}`;moveEl.textContent=moves;win.classList.toggle('show',isWon()); }
-  function isWon(){return tray.length===0&&pieces.every((p,i)=>p===target[i]);}
-  function takeSelectionToTray(){if(!selected.length||tray.length>=CAPACITY)return false;const amount=Math.min(selected.length,CAPACITY-tray.length);const picked=selected.splice(0,amount);for(const i of picked){tray.push(pieces[i]);pieces[i]=null}return amount>0;}
-  function placeFromSelected(i){if(!selected.length||pieces[i]!==null)return false;const colour=pieces[selected[0]];if(colour!==target[i])return false;const dest=emptyRun(i), amount=Math.min(dest.length,selected.length);for(let n=0;n<amount;n++){const source=selected.shift();pieces[dest[n]]=pieces[source];pieces[source]=null}return amount>0;}
-  function placeFromTray(i){
-    if(!tray.length||tray[0]!==target[i]||pieces[i]===target[i])return false;
-    const colour=target[i], dest=waitingRun(i,colour), available=tray.filter(c=>c===colour).length, amount=Math.min(dest.length,available);
-    if(!amount)return false;
-    // Empty sockets simply consume memory. A wrong token is displaced into the
-    // same freed tray slot, making the 12-slot tray a small, forgiving swap buffer.
-    for(let n=0;n<amount;n++){const k=tray.indexOf(colour), displaced=pieces[dest[n]];pieces[dest[n]]=tray.splice(k,1)[0];if(displaced)tray.push(displaced)}
-    return true;
-  }
-  board.addEventListener('pointerup',e=>{const cell=e.target.closest('.cell');if(!cell)return;const i=+cell.dataset.index;
-    // A partial selection can wait on the board while the tray is resolved.
-    if(tray.length&&target[i]===tray[0]&&pieces[i]!==target[i]){if(placeFromTray(i)){moves++;render()}else invalid(board);return}
-    if(pieces[i]===null){const worked=placeFromSelected(i)||placeFromTray(i);if(worked){moves++;render()}else invalid(board);return}if(selected.length){invalid(board);return}if(!liftable(i)){invalid(board);return}selected=selectionFor(i);render()});
-  trayEl.addEventListener('pointerup',()=>{if(takeSelectionToTray()){moves++;render()}else invalid(trayEl)});
-  document.querySelector('#restart').addEventListener('click',()=>reset(initial));
-  document.querySelector('#shuffle').addEventListener('click',()=>reset(shuffled()));
-  reset(newFixed());
-  window.hackDaySwap={state:()=>({target:[...target],pieces:[...pieces],tray:[...tray],selected:[...selected],moves}), reset:()=>reset(newFixed())};
-})();
-</script></body></html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0d19" />
+    <title>Neural Socket</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="lab-header">
+        <div>
+          <div class="eyebrow"><span class="pulse-dot"></span> AI HACK DAY / LAB 03</div>
+          <h1>Neural Socket</h1>
+        </div>
+        <div class="alignment">
+          <span id="remaining">64</span>
+          <small>tokens to align</small>
+        </div>
+      </header>
+
+      <main>
+        <section class="workbench" aria-label="Neural Matrix puzzle">
+          <div class="circuit circuit-a"></div>
+          <div class="circuit circuit-b"></div>
+          <div id="board" class="board" role="grid" aria-label="Neural Matrix board"></div>
+        </section>
+
+        <section class="buffer-panel" aria-labelledby="buffer-title">
+          <div class="buffer-label">
+            <span id="buffer-title">Context buffer</span>
+            <span id="capacity-readout">0 / 8</span>
+          </div>
+          <div id="shelf" class="shelf-drop-zone" aria-label="Context buffer: tap to store selected tokens">
+            <div id="shelf-slots" class="shelf-slots"></div>
+          </div>
+        </section>
+
+        <div id="status" class="status" aria-live="polite">Select a mismatched token.</div>
+      </main>
+
+      <footer>
+        <button id="undo" type="button" disabled><span aria-hidden="true">↶</span> Undo</button>
+        <button id="hint" type="button"><span aria-hidden="true">⌁</span> Hint</button>
+        <button id="restart" type="button"><span aria-hidden="true">↻</span> Restart</button>
+      </footer>
+
+      <div id="win" class="win-panel" role="dialog" aria-modal="true" aria-labelledby="win-title">
+        <div class="win-core" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="eyebrow">ALIGNMENT CERTIFIED</div>
+        <h2 id="win-title">Model online</h2>
+        <p id="win-copy"></p>
+        <button id="win-restart" type="button">Run again</button>
+      </div>
+      <div id="particles" aria-hidden="true"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

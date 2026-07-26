@@ -1,2 +1,7 @@
 .DS_Store
 .vercel
+node_modules
+dist
+artifacts
+test-results
+playwright-report
